@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import TransferForm from './TransferForm';
 import MessageForm from './MessageForm';
+import { Card, CardContent } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const TransferModule: React.FC = () => {
   const [activeTab, setActiveTab] = useState('transfer');
@@ -11,44 +13,33 @@ const TransferModule: React.FC = () => {
   ];
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        {/* Tab Headers */}
-        <div className="border-b border-gray-200">
-          <nav className="flex space-x-8 px-6" aria-label="Tabs">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                  activeTab === tab.id
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                {tab.name}
-              </button>
-            ))}
-          </nav>
-        </div>
+    <div className="w-full p-6">
+      <Card>
+        <CardContent className="p-0">
+          <Tabs defaultValue="transfer" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="transfer">转账方式</TabsTrigger>
+              <TabsTrigger value="logs">日志方式</TabsTrigger>
+            </TabsList>
+            
+            <div className="p-6">
+              <TabsContent value="transfer" className="mt-0">
+                <div className="min-h-96">
+                  <h3 className="text-lg font-medium mb-6">转账方式</h3>
+                  <TransferForm />
+                </div>
+              </TabsContent>
 
-        {/* Tab Content */}
-        <div className="p-6">
-          {activeTab === 'transfer' && (
-            <div className="min-h-96">
-              <h3 className="text-lg font-medium text-gray-900 mb-6">转账方式</h3>
-              <TransferForm />
+              <TabsContent value="logs" className="mt-0">
+                <div className="min-h-96">
+                  <h3 className="text-lg font-medium mb-4">日志方式</h3>
+                  <MessageForm />
+                </div>
+              </TabsContent>
             </div>
-          )}
-
-          {activeTab === 'logs' && (
-            <div className="min-h-96">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">日志方式</h3>
-              <MessageForm />
-            </div>
-          )}
-        </div>
-      </div>
+          </Tabs>
+        </CardContent>
+      </Card>
     </div>
   );
 };
