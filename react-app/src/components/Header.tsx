@@ -90,31 +90,6 @@ const Header: React.FC = () => {
     setIsConnecting(true);
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
-
-      try {
-        await window.ethereum.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: `0x${selectedNetwork.chainId.toString(16)}` }],
-        });
-      } catch (switchError: any) {
-        if (switchError.code === 4902) {
-          await window.ethereum.request({
-            method: 'wallet_addEthereumChain',
-            params: [{
-              chainId: `0x${selectedNetwork.chainId.toString(16)}`,
-              chainName: selectedNetwork.name,
-              rpcUrls: [selectedNetwork.rpcUrl],
-              nativeCurrency: {
-                name: selectedNetwork.symbol,
-                symbol: selectedNetwork.symbol,
-                decimals: 18,
-              },
-              blockExplorerUrls: selectedNetwork.explorer ? [selectedNetwork.explorer] : null,
-            }],
-          });
-        }
-      }
-
       const accounts = await provider.send("eth_requestAccounts", []);
       const currentAddress = accounts[0];
 

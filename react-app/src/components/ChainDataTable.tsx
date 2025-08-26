@@ -1,29 +1,41 @@
-import React, { useState, useEffect } from 'react';
-import { chainDataService } from '../services/chainDataService';
-import type { TransactionData, BlockData, AccountBalance } from '../services/chainDataService';
+import React, { useState, useEffect } from "react";
+import { chainDataService } from "../services/chainDataService";
+import type {
+  TransactionData,
+  BlockData,
+  AccountBalance,
+} from "../services/chainDataService";
 
-type DataType = 'transactions' | 'blocks' | 'balance';
+type DataType = "transactions" | "blocks" | "balance";
 
 interface ChainDataTableProps {
   dataType: DataType;
   searchAddress?: string;
 }
 
-const ChainDataTable: React.FC<ChainDataTableProps> = ({ dataType, searchAddress }) => {
-  const [data, setData] = useState<TransactionData[] | BlockData[] | AccountBalance[]>([]);
+const ChainDataTable: React.FC<ChainDataTableProps> = ({
+  dataType,
+  searchAddress,
+}) => {
+  const [data, setData] = useState<
+    TransactionData[] | BlockData[] | AccountBalance[]
+  >([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string>('');
+  const [error, setError] = useState<string>("");
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
-    setError('');
+    setError("");
 
     try {
       switch (dataType) {
-        case 'transactions':
+        case "transactions":
           if (searchAddress) {
-            const txData = await chainDataService.searchTransactionsByAddress(searchAddress, 20);
+            const txData = await chainDataService.searchTransactionsByAddress(
+              searchAddress,
+              20
+            );
             setData(txData);
           } else {
             const txData = await chainDataService.getLatestTransactions(10);
@@ -31,26 +43,28 @@ const ChainDataTable: React.FC<ChainDataTableProps> = ({ dataType, searchAddress
           }
           break;
 
-        case 'blocks':
+        case "blocks":
           const blockData = await chainDataService.getLatestBlocks(10);
           setData(blockData);
           break;
 
-        case 'balance':
+        case "balance":
           if (searchAddress) {
-            const balanceData = await chainDataService.getAccountBalance(searchAddress);
+            const balanceData = await chainDataService.getAccountBalance(
+              searchAddress
+            );
             setData([balanceData]);
           } else {
-            setError('查询余额需要提供地址');
+            setError("查询余额需要提供地址");
           }
           break;
 
         default:
-          setError('不支持的数据类型');
+          setError("不支持的数据类型");
       }
     } catch (err: any) {
-      console.error('数据获取失败:', err);
-      setError(err.message || '数据获取失败');
+      console.error("数据获取失败:", err);
+      setError(err.message || "数据获取失败");
     } finally {
       setLoading(false);
     }
@@ -68,18 +82,26 @@ const ChainDataTable: React.FC<ChainDataTableProps> = ({ dataType, searchAddress
 
   const formatAddress = (address: string) => {
     if (!address) {
-      return
+      return;
     }
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
   const formatTimestamp = (timestamp: number) => {
-    return new Date(timestamp * 1000).toLocaleString('zh-CN');
+    return new Date(timestamp * 1000).toLocaleString("zh-CN");
+  };
+
+  const formatInputData = (val: string) => {
+    return val === "0x" ? "-" : `${val}`;
   };
 
   const formatNumber = (num: string | number, decimals: number = 6) => {
+    if (!num) {
+      return;
+    }
+
     const n = parseFloat(num.toString());
-    return isNaN(n) ? '0' : n.toFixed(decimals);
+    return isNaN(n) ? "0" : n.toFixed(decimals);
   };
 
   const renderTransactionTable = (transactions: TransactionData[]) => (
@@ -108,22 +130,28 @@ const ChainDataTable: React.FC<ChainDataTableProps> = ({ dataType, searchAddress
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               状态
             </th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Input Data
+            </th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
           {transactions.map((tx, index) => (
-            <tr key={tx.hash} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+            <tr
+              key={tx.hash}
+              className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}
+            >
               <td className="px-4 py-3 whitespace-nowrap text-sm font-mono text-blue-600">
                 {formatAddress(tx.hash)}
               </td>
               <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                {tx.blockNumber.toLocaleString()}
+                {tx.blockNumber}
               </td>
               <td className="px-4 py-3 whitespace-nowrap text-sm font-mono text-gray-700">
                 {formatAddress(tx.from)}
               </td>
               <td className="px-4 py-3 whitespace-nowrap text-sm font-mono text-gray-700">
-                {tx.to ? formatAddress(tx.to) : '-'}
+                {tx.to ? formatAddress(tx.to) : "-"}
               </td>
               <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
                 {formatNumber(tx.value)}
@@ -132,12 +160,19 @@ const ChainDataTable: React.FC<ChainDataTableProps> = ({ dataType, searchAddress
                 {formatNumber(tx.gasPrice, 2)} Gwei
               </td>
               <td className="px-4 py-3 whitespace-nowrap">
-                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                  tx.status === 1
-                    ? 'bg-green-100 text-green-800'
-                    : 'bg-red-100 text-red-800'
-                }`}>
-                  {tx.status === 1 ? '成功' : '失败'}
+                <span
+                  className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                    tx.status === 1
+                      ? "bg-green-100 text-green-800"
+                      : "bg-red-100 text-red-800"
+                  }`}
+                >
+                  {tx.status === 1 ? "成功" : "失败"}
+                </span>
+              </td>
+              <td className="px-4 py-3 whitespace-nowrap text-sm font-mono text-gray-700 max-w-xs overflow-hidden text-ellipsis">
+                <span title={formatInputData(tx.input)}>
+                  {formatInputData(tx.input)}
                 </span>
               </td>
             </tr>
@@ -174,7 +209,10 @@ const ChainDataTable: React.FC<ChainDataTableProps> = ({ dataType, searchAddress
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
           {blocks.map((block, index) => (
-            <tr key={block.hash} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+            <tr
+              key={block.hash}
+              className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}
+            >
               <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 font-mono">
                 {block.number}
               </td>
@@ -218,7 +256,10 @@ const ChainDataTable: React.FC<ChainDataTableProps> = ({ dataType, searchAddress
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
           {balances.map((balance, index) => (
-            <tr key={balance.address} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+            <tr
+              key={balance.address}
+              className={index % 2 === 0 ? "bg-white" : "bg-gray-50"}
+            >
               <td className="px-4 py-3 whitespace-nowrap text-sm font-mono text-gray-900">
                 {balance.address}
               </td>
@@ -237,14 +278,16 @@ const ChainDataTable: React.FC<ChainDataTableProps> = ({ dataType, searchAddress
 
   const getTableTitle = () => {
     switch (dataType) {
-      case 'transactions':
-        return searchAddress ? `地址 ${formatAddress(searchAddress)} 的交易记录` : '最新交易';
-      case 'blocks':
-        return '最新区块';
-      case 'balance':
-        return '账户余额';
+      case "transactions":
+        return searchAddress
+          ? `地址 ${formatAddress(searchAddress)} 的交易记录`
+          : "最新交易";
+      case "blocks":
+        return "最新区块";
+      case "balance":
+        return "账户余额";
       default:
-        return '链上数据';
+        return "链上数据";
     }
   };
 
@@ -252,11 +295,11 @@ const ChainDataTable: React.FC<ChainDataTableProps> = ({ dataType, searchAddress
     if (data.length === 0) return null;
 
     switch (dataType) {
-      case 'transactions':
+      case "transactions":
         return renderTransactionTable(data as TransactionData[]);
-      case 'blocks':
+      case "blocks":
         return renderBlockTable(data as BlockData[]);
-      case 'balance':
+      case "balance":
         return renderBalanceTable(data as AccountBalance[]);
       default:
         return null;
@@ -289,8 +332,16 @@ const ChainDataTable: React.FC<ChainDataTableProps> = ({ dataType, searchAddress
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
               <div className="text-red-500 mb-2">
-                <svg className="w-12 h-12 mx-auto" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                <svg
+                  className="w-12 h-12 mx-auto"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                    clipRule="evenodd"
+                  />
                 </svg>
               </div>
               <p className="text-red-600 font-medium">数据加载失败</p>
@@ -307,8 +358,16 @@ const ChainDataTable: React.FC<ChainDataTableProps> = ({ dataType, searchAddress
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
               <div className="text-gray-400 mb-2">
-                <svg className="w-12 h-12 mx-auto" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+                <svg
+                  className="w-12 h-12 mx-auto"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
+                    clipRule="evenodd"
+                  />
                 </svg>
               </div>
               <p className="text-gray-500">暂无数据</p>

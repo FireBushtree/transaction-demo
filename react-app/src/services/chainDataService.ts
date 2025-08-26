@@ -10,6 +10,7 @@ export interface TransactionData {
   gasUsed: string;
   timestamp: number;
   status: number;
+  input: string;
 }
 
 export interface BlockData {
@@ -67,6 +68,7 @@ export class ChainDataService {
               gasUsed: receipt.gasUsed.toString(),
               timestamp: latestBlock.timestamp,
               status: receipt.status || 0,
+              input: tx.data || "0x",
             });
           }
         }
@@ -82,9 +84,9 @@ export class ChainDataService {
   async getLatestBlocks(count: number = 10): Promise<BlockData[]> {
     if (!this.provider) throw new Error("Provider not initialized");
 
+    const blocks: BlockData[] = [];
     try {
       const latestBlockNumber = await this.provider.getBlockNumber();
-      const blocks: BlockData[] = [];
 
       for (let i = 0; i < count; i++) {
         const blockNumber = latestBlockNumber - i;
@@ -106,7 +108,7 @@ export class ChainDataService {
       return blocks;
     } catch (error) {
       console.error("Error fetching blocks:", error);
-      throw error;
+      return blocks;
     }
   }
 
@@ -134,9 +136,9 @@ export class ChainDataService {
   ): Promise<TransactionData[]> {
     if (!this.provider) throw new Error("Provider not initialized");
 
+    const transactions: TransactionData[] = [];
     try {
       const latestBlockNumber = await this.provider.getBlockNumber();
-      const transactions: TransactionData[] = [];
       const maxBlocksToSearch = 100;
 
       for (
@@ -171,6 +173,7 @@ export class ChainDataService {
                   gasUsed: receipt.gasUsed.toString(),
                   timestamp: block.timestamp,
                   status: receipt.status || 0,
+                  input: tx.data || "0x",
                 });
               }
 
@@ -183,7 +186,7 @@ export class ChainDataService {
       return transactions;
     } catch (error) {
       console.error("Error searching transactions:", error);
-      throw error;
+      return transactions;
     }
   }
 }
