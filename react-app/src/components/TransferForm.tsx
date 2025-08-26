@@ -1,5 +1,11 @@
 import React, { useState } from 'react';
 import { ethers } from 'ethers';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Card, CardContent } from '@/components/ui/card';
 
 interface TransferFormData {
   recipientAddress: string;
@@ -135,17 +141,14 @@ const TransferForm: React.FC = () => {
     }
   };
 
-  const getStatusColor = () => {
+  const getButtonVariant = (): "default" | "destructive" | "outline" | "secondary" | "ghost" | "link" => {
     switch (txStatus) {
       case 'confirmed':
-        return 'bg-green-600 hover:bg-green-700';
+        return 'default';
       case 'failed':
-        return 'bg-red-600 hover:bg-red-700';
-      case 'preparing':
-      case 'pending':
-        return 'bg-yellow-600 hover:bg-yellow-700';
+        return 'destructive';
       default:
-        return 'bg-blue-600 hover:bg-blue-700';
+        return 'default';
     }
   };
 
@@ -153,27 +156,26 @@ const TransferForm: React.FC = () => {
     <div className="max-w-md mx-auto">
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* 接收方地址 */}
-        <div>
-          <label htmlFor="recipient" className="block text-sm font-medium text-gray-700 mb-2">
+        <div className="space-y-2">
+          <Label htmlFor="recipient">
             接收方地址 *
-          </label>
-          <input
+          </Label>
+          <Input
             id="recipient"
             type="text"
             value={formData.recipientAddress}
             onChange={(e) => handleInputChange('recipientAddress', e.target.value)}
             placeholder="0x..."
             disabled={txStatus !== 'idle'}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed text-sm"
           />
         </div>
 
         {/* 转账金额 */}
-        <div>
-          <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-2">
+        <div className="space-y-2">
+          <Label htmlFor="amount">
             转账金额 (ETH) *
-          </label>
-          <input
+          </Label>
+          <Input
             id="amount"
             type="number"
             step="0.000001"
@@ -182,81 +184,75 @@ const TransferForm: React.FC = () => {
             onChange={(e) => handleInputChange('amount', e.target.value)}
             placeholder="0.1"
             disabled={txStatus !== 'idle'}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed text-sm"
           />
         </div>
 
         {/* Input Data */}
-        <div>
-          <label htmlFor="inputData" className="block text-sm font-medium text-gray-700 mb-2">
+        <div className="space-y-2">
+          <Label htmlFor="inputData">
             Input Data
-          </label>
-          <textarea
+          </Label>
+          <Textarea
             id="inputData"
             value={formData.inputData}
             onChange={(e) => handleInputChange('inputData', e.target.value)}
             placeholder="0x... (可选)"
             rows={3}
             disabled={txStatus !== 'idle'}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed text-sm resize-none"
+            className="resize-none"
           />
         </div>
 
         {/* 交易状态 */}
         {txStatus !== 'idle' && (
-          <div className="space-y-3">
-            <div className={`p-3 rounded-lg ${
-              txStatus === 'confirmed' ? 'bg-green-50 border border-green-200' :
-              txStatus === 'failed' ? 'bg-red-50 border border-red-200' :
-              'bg-yellow-50 border border-yellow-200'
-            }`}>
-              <div className="flex items-center space-x-2">
-                {(txStatus === 'preparing' || txStatus === 'pending') && (
-                  <div className="animate-spin w-4 h-4 border-2 border-yellow-500 border-t-transparent rounded-full"></div>
-                )}
-                {txStatus === 'confirmed' && (
-                  <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                )}
-                {txStatus === 'failed' && (
-                  <svg className="w-4 h-4 text-red-600" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
-                )}
-                <span className={`text-sm font-medium ${
-                  txStatus === 'confirmed' ? 'text-green-800' :
-                  txStatus === 'failed' ? 'text-red-800' :
-                  'text-yellow-800'
-                }`}>
-                  {getStatusText()}
-                </span>
-              </div>
+          <Alert variant={txStatus === 'failed' ? 'destructive' : 'default'}>
+            <div className="flex items-center space-x-2">
+              {(txStatus === 'preparing' || txStatus === 'pending') && (
+                <div className="animate-spin w-4 h-4 border-2 border-primary border-t-transparent rounded-full"></div>
+              )}
+              {txStatus === 'confirmed' && (
+                <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+              )}
+              {txStatus === 'failed' && (
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              )}
+              <span className="font-medium">
+                {getStatusText()}
+              </span>
+            </div>
+            <AlertDescription>
               {txHash && (
                 <div className="mt-2">
-                  <p className="text-xs text-gray-600">交易哈希:</p>
-                  <code className="text-xs break-all bg-gray-100 px-2 py-1 rounded mt-1 block">
+                  <p className="text-xs">交易哈希:</p>
+                  <code className="text-xs break-all bg-muted px-2 py-1 rounded mt-1 block">
                     {txHash}
                   </code>
                 </div>
               )}
               {error && (
-                <p className="text-sm text-red-600 mt-2">{error}</p>
+                <p className="mt-2">{error}</p>
               )}
-            </div>
-          </div>
+            </AlertDescription>
+          </Alert>
         )}
 
         {/* 提交按钮 */}
-        <button
+        <Button
           type="submit"
           disabled={!isFormValid}
-          className={`w-full disabled:bg-gray-400 disabled:cursor-not-allowed text-white py-3 px-4 rounded-lg font-medium text-sm transition-colors ${
-            isFormValid ? getStatusColor() : ''
-          }`}
+          variant={getButtonVariant()}
+          className="w-full"
+          size="lg"
         >
+          {(txStatus === 'preparing' || txStatus === 'pending') && (
+            <div className="animate-spin w-4 h-4 border-2 border-current border-t-transparent rounded-full mr-2"></div>
+          )}
           {getStatusText()}
-        </button>
+        </Button>
       </form>
     </div>
   );
