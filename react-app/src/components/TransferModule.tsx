@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import TransferForm from './TransferForm';
+import MessageForm from './MessageForm';
 
 const TransferModule: React.FC = () => {
   const [activeTab, setActiveTab] = useState('transfer');
@@ -43,9 +44,7 @@ const TransferModule: React.FC = () => {
           {activeTab === 'logs' && (
             <div className="min-h-96">
               <h3 className="text-lg font-medium text-gray-900 mb-4">日志方式</h3>
-              <div className="flex items-center justify-center h-64 bg-gray-50 rounded-lg">
-                <p className="text-gray-500">日志功能内容待实现</p>
-              </div>
+              <MessageForm />
             </div>
           )}
         </div>
