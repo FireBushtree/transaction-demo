@@ -1,6 +1,7 @@
 import axios from "axios";
 import { ethers } from "ethers";
 import { useEffect, useState, type FormEvent } from "react";
+import { Button } from "@/components/ui/button";
 
 export default function MessageForm() {
   const [formData, setFormData] = useState({
@@ -54,12 +55,8 @@ export default function MessageForm() {
 
   return (
     <div className="max-w-md mx-auto">
-      <button
-        onClick={handleRefresh}
-        className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        刷新数据
-      </button>
+      <Button>toString</Button>
+
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* 接收方地址 */}
         <div>
