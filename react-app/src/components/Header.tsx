@@ -24,11 +24,16 @@ interface WalletProvider {
   connect: () => Promise<any>;
 }
 
-interface WalletInfo {
+interface WalletAddress {
   address: string;
   ensName?: string;
   avatar?: string;
   nfts: NFT[];
+}
+
+interface WalletInfo {
+  currentAddress: string;
+  addresses: WalletAddress[];
   network: Network;
   provider: WalletProvider;
 }
@@ -54,59 +59,24 @@ const NETWORKS: Network[] = [
     id: 'localhost',
     name: '本地链',
     chainId: 1337,
-    rpcUrl: 'http://localhost:8545',
+    rpcUrl: 'http://localhost:7545',
     symbol: 'ETH',
     explorer: undefined
   }
 ];
 
-const WALLET_PROVIDERS: WalletProvider[] = [
-  {
-    id: 'metamask',
-    name: 'MetaMask',
-    icon: '🦊',
-    checkAvailability: () => !!(window as any).ethereum?.isMetaMask,
-    connect: async () => {
-      if (!(window as any).ethereum?.isMetaMask) {
-        throw new Error('MetaMask 未安装');
-      }
-      return (window as any).ethereum;
+const METAMASK_PROVIDER: WalletProvider = {
+  id: 'metamask',
+  name: 'MetaMask',
+  icon: '🦊',
+  checkAvailability: () => !!(window as any).ethereum?.isMetaMask,
+  connect: async () => {
+    if (!(window as any).ethereum?.isMetaMask) {
+      throw new Error('MetaMask 未安装');
     }
-  },
-  {
-    id: 'walletconnect',
-    name: 'WalletConnect',
-    icon: '🔗',
-    checkAvailability: () => true,
-    connect: async () => {
-      throw new Error('WalletConnect 集成待实现');
-    }
-  },
-  {
-    id: 'coinbase',
-    name: 'Coinbase Wallet',
-    icon: '💙',
-    checkAvailability: () => !!(window as any).ethereum?.isCoinbaseWallet,
-    connect: async () => {
-      if (!(window as any).ethereum?.isCoinbaseWallet) {
-        throw new Error('Coinbase Wallet 未安装');
-      }
-      return (window as any).ethereum;
-    }
-  },
-  {
-    id: 'phantom',
-    name: 'Phantom',
-    icon: '👻',
-    checkAvailability: () => !!(window as any).solana?.isPhantom,
-    connect: async () => {
-      if (!(window as any).solana?.isPhantom) {
-        throw new Error('Phantom 钱包未安装');
-      }
-      throw new Error('Phantom 是 Solana 钱包，请选择以太坊钱包');
-    }
+    return (window as any).ethereum;
   }
-];
+};
 
 const Header: React.FC = () => {
   const [wallet, setWallet] = useState<WalletInfo | null>(null);
@@ -114,33 +84,28 @@ const Header: React.FC = () => {
   const [showNFTs, setShowNFTs] = useState(false);
   const [selectedNetwork, setSelectedNetwork] = useState<Network>(NETWORKS[0]);
   const [showNetworkDropdown, setShowNetworkDropdown] = useState(false);
-  const [selectedWalletProvider, setSelectedWalletProvider] = useState<WalletProvider>(WALLET_PROVIDERS[0]);
-  const [showWalletDropdown, setShowWalletDropdown] = useState(false);
+  const [showAddressDropdown, setShowAddressDropdown] = useState(false);
 
-  const handleWalletProviderChange = (provider: WalletProvider) => {
-    setSelectedWalletProvider(provider);
-    setShowWalletDropdown(false);
-  };
 
   const connectWallet = async () => {
-    if (!selectedWalletProvider.checkAvailability()) {
-      alert(`${selectedWalletProvider.name} 钱包未安装或不可用！`);
+    if (!window.ethereum) {
+      alert('请安装 MetaMask!');
       return;
     }
 
     setIsConnecting(true);
     try {
-      const walletInstance = await selectedWalletProvider.connect();
-      const provider = new ethers.BrowserProvider(walletInstance);
-      
+      const provider = new ethers.BrowserProvider(window.ethereum);
+
       try {
-        await walletInstance.request({
+        await window.ethereum.request({
           method: 'wallet_switchEthereumChain',
           params: [{ chainId: `0x${selectedNetwork.chainId.toString(16)}` }],
         });
+        debugger
       } catch (switchError: any) {
         if (switchError.code === 4902) {
-          await walletInstance.request({
+          await window.ethereum.request({
             method: 'wallet_addEthereumChain',
             params: [{
               chainId: `0x${selectedNetwork.chainId.toString(16)}`,
@@ -156,40 +121,51 @@ const Header: React.FC = () => {
           });
         }
       }
-      
-      await provider.send("eth_requestAccounts", []);
-      const signer = await provider.getSigner();
-      const address = await signer.getAddress();
+
+      const accounts = await provider.send("eth_requestAccounts", []);
+      const currentAddress = accounts[0];
+
+      const addresses: WalletAddress[] = await Promise.all(
+        accounts.map(async (addr: string) => {
+          const addressInfo: WalletAddress = {
+            address: addr,
+            avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${addr}`,
+            nfts: []
+          };
+
+          await Promise.all([
+            fetchENSForAddress(addr, addressInfo, provider),
+            fetchNFTsForAddress(addr, addressInfo)
+          ]);
+
+          return addressInfo;
+        })
+      );
 
       const walletInfo: WalletInfo = {
-        address,
-        avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${address}`,
-        nfts: [],
+        currentAddress,
+        addresses,
         network: selectedNetwork,
-        provider: selectedWalletProvider
+        provider: METAMASK_PROVIDER
       };
 
-      await Promise.all([
-        fetchENS(address, walletInfo, provider),
-        fetchNFTs(address, walletInfo)
-      ]);
       setWallet(walletInfo);
     } catch (error: any) {
       console.error('连接钱包失败:', error);
-      alert(error.message || `连接 ${selectedWalletProvider.name} 失败`);
+      alert(error.message || '连接钱包失败');
     } finally {
       setIsConnecting(false);
     }
   };
 
-  const fetchENS = async (address: string, walletInfo: WalletInfo, provider: ethers.BrowserProvider) => {
+  const fetchENSForAddress = async (address: string, addressInfo: WalletAddress, provider: ethers.BrowserProvider) => {
     try {
       const ensName = await provider.lookupAddress(address);
       if (ensName) {
-        walletInfo.ensName = ensName;
+        addressInfo.ensName = ensName;
         const ensAvatar = await provider.getAvatar(ensName);
         if (ensAvatar) {
-          walletInfo.avatar = ensAvatar;
+          addressInfo.avatar = ensAvatar;
         }
       }
     } catch (error) {
@@ -197,7 +173,7 @@ const Header: React.FC = () => {
     }
   };
 
-  const fetchNFTs = async (address: string, walletInfo: WalletInfo) => {
+  const fetchNFTsForAddress = async (address: string, addressInfo: WalletAddress) => {
     try {
       const response = await fetch(
         `https://api.opensea.io/api/v1/assets?owner=${address}&limit=10`,
@@ -207,10 +183,10 @@ const Header: React.FC = () => {
           }
         }
       );
-      
+
       if (response.ok) {
         const data = await response.json();
-        walletInfo.nfts = data.assets?.map((asset: any) => ({
+        addressInfo.nfts = data.assets?.map((asset: any) => ({
           tokenId: asset.token_id,
           image: asset.image_url,
           name: asset.name || `#${asset.token_id}`
@@ -224,14 +200,14 @@ const Header: React.FC = () => {
   const handleNetworkChange = async (network: Network) => {
     setSelectedNetwork(network);
     setShowNetworkDropdown(false);
-    
+
     if (wallet && window.ethereum) {
       try {
         await window.ethereum.request({
           method: 'wallet_switchEthereumChain',
           params: [{ chainId: `0x${network.chainId.toString(16)}` }],
         });
-        
+
         const updatedWallet = { ...wallet, network };
         setWallet(updatedWallet);
       } catch (error: any) {
@@ -251,7 +227,7 @@ const Header: React.FC = () => {
                 blockExplorerUrls: network.explorer ? [network.explorer] : null,
               }],
             });
-            
+
             const updatedWallet = { ...wallet, network };
             setWallet(updatedWallet);
           } catch (addError) {
@@ -266,9 +242,20 @@ const Header: React.FC = () => {
     }
   };
 
+  const handleAddressChange = (newAddress: string) => {
+    if (wallet) {
+      setWallet({
+        ...wallet,
+        currentAddress: newAddress
+      });
+    }
+    setShowAddressDropdown(false);
+  };
+
   const disconnectWallet = () => {
     setWallet(null);
     setShowNFTs(false);
+    setShowAddressDropdown(false);
   };
 
   const formatAddress = (address: string) => {
@@ -282,24 +269,30 @@ const Header: React.FC = () => {
         const accounts = await provider.send("eth_accounts", []);
         if (accounts.length > 0) {
           const address = accounts[0];
-          
+
           try {
             const chainId = await window.ethereum.request({ method: 'eth_chainId' });
             const currentChainId = parseInt(chainId, 16);
             const currentNetwork = NETWORKS.find(n => n.chainId === currentChainId) || NETWORKS[0];
             setSelectedNetwork(currentNetwork);
-            
-            const walletInfo: WalletInfo = {
+
+            const addressInfo: WalletAddress = {
               address,
               avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${address}`,
-              nfts: [],
-              network: currentNetwork,
-              provider: selectedWalletProvider
+              nfts: []
             };
+
             await Promise.all([
-              fetchENS(address, walletInfo, provider),
-              fetchNFTs(address, walletInfo)
+              fetchENSForAddress(address, addressInfo, provider),
+              fetchNFTsForAddress(address, addressInfo)
             ]);
+
+            const walletInfo: WalletInfo = {
+              currentAddress: address,
+              addresses: [addressInfo],
+              network: currentNetwork,
+              provider: METAMASK_PROVIDER
+            };
             setWallet(walletInfo);
           } catch (error) {
             console.error('获取当前网络失败:', error);
@@ -327,7 +320,7 @@ const Header: React.FC = () => {
               >
                 <div className={`w-3 h-3 rounded-full ${
                   selectedNetwork.id === 'ethereum' ? 'bg-blue-500' :
-                  selectedNetwork.id === 'sepolia' ? 'bg-purple-500' : 
+                  selectedNetwork.id === 'sepolia' ? 'bg-purple-500' :
                   'bg-gray-500'
                 }`}></div>
                 <span className="text-sm font-medium text-gray-700">
@@ -350,7 +343,7 @@ const Header: React.FC = () => {
                     >
                       <div className={`w-3 h-3 rounded-full ${
                         network.id === 'ethereum' ? 'bg-blue-500' :
-                        network.id === 'sepolia' ? 'bg-purple-500' : 
+                        network.id === 'sepolia' ? 'bg-purple-500' :
                         'bg-gray-500'
                       }`}></div>
                       <span className="text-sm font-medium">{network.name}</span>
@@ -370,11 +363,11 @@ const Header: React.FC = () => {
                 <div className="flex items-center space-x-3">
                   <div
                     className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 rounded-lg p-2 transition-colors"
-                    onClick={() => setShowNFTs(!showNFTs)}
+                    onClick={() => setShowAddressDropdown(!showAddressDropdown)}
                   >
                     <div className="relative">
                       <img
-                        src={wallet.avatar}
+                        src={wallet.addresses.find(addr => addr.address === wallet.currentAddress)?.avatar || `https://api.dicebear.com/7.x/identicon/svg?seed=${wallet.currentAddress}`}
                         alt="Avatar"
                         className="w-8 h-8 rounded-full"
                       />
@@ -383,33 +376,82 @@ const Header: React.FC = () => {
                       </span>
                     </div>
                     <div className="flex flex-col">
-                      <span className="text-sm font-medium text-gray-700">
-                        {wallet.ensName || formatAddress(wallet.address)}
-                      </span>
+                      <div className="flex items-center space-x-1">
+                        <span className="text-sm font-medium text-gray-700">
+                          {wallet.addresses.find(addr => addr.address === wallet.currentAddress)?.ensName || formatAddress(wallet.currentAddress)}
+                        </span>
+                        {wallet.addresses.length > 1 && (
+                          <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        )}
+                      </div>
                       <span className="text-xs text-gray-500">
                         {wallet.provider.name}
                       </span>
                     </div>
-                    {wallet.nfts.length > 0 && (
-                      <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
-                        {wallet.nfts.length} NFT{wallet.nfts.length > 1 ? 's' : ''}
-                      </span>
-                    )}
                   </div>
-                  <button
-                    onClick={disconnectWallet}
-                    className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+
+                  {wallet.addresses.length > 1 && showAddressDropdown && (
+                    <div className="absolute top-full left-0 mt-2 w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-15">
+                      <div className="p-3">
+                        <h3 className="text-sm font-medium text-gray-900 mb-2">切换账户</h3>
+                        <div className="space-y-1 max-h-48 overflow-y-auto">
+                          {wallet.addresses.map((addr, index) => (
+                            <button
+                              key={addr.address}
+                              onClick={() => handleAddressChange(addr.address)}
+                              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors ${
+                                wallet.currentAddress === addr.address ? 'bg-blue-50 border border-blue-200' : 'border border-transparent'
+                              }`}
+                            >
+                              <img
+                                src={addr.avatar}
+                                alt="Avatar"
+                                className="w-6 h-6 rounded-full"
+                              />
+                              <div className="flex-1 text-left">
+                                <div className="text-sm font-medium text-gray-700">
+                                  {addr.ensName || formatAddress(addr.address)}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  账户 {index + 1}
+                                </div>
+                              </div>
+                              {wallet.currentAddress === addr.address && (
+                                <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div
+                    className="cursor-pointer hover:bg-gray-50 rounded-lg p-1 transition-colors"
+                    onClick={() => setShowNFTs(!showNFTs)}
                   >
-                    断开
-                  </button>
+                    {(() => {
+                      const currentAddressInfo = wallet.addresses.find(addr => addr.address === wallet.currentAddress);
+                      const nftCount = currentAddressInfo?.nfts.length || 0;
+                      return nftCount > 0 && (
+                        <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
+                          {nftCount} NFT{nftCount > 1 ? 's' : ''}
+                        </span>
+                      );
+                    })()}
+                  </div>
                 </div>
 
-                {showNFTs && wallet.nfts.length > 0 && (
+                {showNFTs && wallet.addresses.find(addr => addr.address === wallet.currentAddress)?.nfts.length && (
                   <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
                     <div className="p-4">
                       <h3 className="text-sm font-medium text-gray-900 mb-3">我的 NFTs</h3>
                       <div className="grid grid-cols-3 gap-3 max-h-60 overflow-y-auto">
-                        {wallet.nfts.map((nft, index) => (
+                        {wallet.addresses.find(addr => addr.address === wallet.currentAddress)?.nfts.map((nft: NFT, index: number) => (
                           <div key={index} className="flex flex-col items-center">
                             <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 bg-gray-100">
                               {nft.image ? (
@@ -435,64 +477,13 @@ const Header: React.FC = () => {
                 )}
               </div>
             ) : (
-              <div className="relative">
-                <button
-                  onClick={() => setShowWalletDropdown(!showWalletDropdown)}
-                  className="flex items-center space-x-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                  disabled={isConnecting}
-                >
-                  <span className="text-lg">{selectedWalletProvider.icon}</span>
-                  <span className="text-sm font-medium">
-                    {isConnecting ? '连接中...' : `连接 ${selectedWalletProvider.name}`}
-                  </span>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-
-                {showWalletDropdown && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
-                    {WALLET_PROVIDERS.map((provider) => {
-                      const isAvailable = provider.checkAvailability();
-                      return (
-                        <button
-                          key={provider.id}
-                          onClick={() => handleWalletProviderChange(provider)}
-                          disabled={!isAvailable}
-                          className={`w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg transition-colors ${
-                            selectedWalletProvider.id === provider.id ? 'bg-blue-50 text-blue-700' : 
-                            !isAvailable ? 'text-gray-400 cursor-not-allowed' : 'text-gray-700'
-                          }`}
-                        >
-                          <div className="flex items-center space-x-3">
-                            <span className="text-lg">{provider.icon}</span>
-                            <span className="text-sm font-medium">{provider.name}</span>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            {!isAvailable && (
-                              <span className="text-xs text-red-500">未安装</span>
-                            )}
-                            {selectedWalletProvider.id === provider.id && (
-                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                              </svg>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
-                    <div className="border-t border-gray-200 pt-2">
-                      <button
-                        onClick={connectWallet}
-                        disabled={isConnecting || !selectedWalletProvider.checkAvailability()}
-                        className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-b-lg text-sm font-medium transition-colors"
-                      >
-                        {isConnecting ? '连接中...' : '连接钱包'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <button
+                onClick={connectWallet}
+                disabled={isConnecting}
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                {isConnecting ? '连接中...' : '连接钱包'}
+              </button>
             )}
           </div>
         </div>
