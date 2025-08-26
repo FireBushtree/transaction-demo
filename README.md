@@ -1,11 +1,60 @@
-# React + TypeScript + Vite
+# React + TypeScript + Vite + Tailwind CSS
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This project is a React application built with TypeScript, Vite, and Tailwind CSS for styling.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- ⚡ **Vite** - Fast build tool and development server
+- ⚛️ **React 19** - Latest React version with modern features
+- 🏷️ **TypeScript** - Type safety and better developer experience
+- 🎨 **Tailwind CSS v4** - Utility-first CSS framework with latest version
+- 🔍 **ESLint** - Code linting and quality checks
+
+## Getting Started
+
+### Installation
+
+```bash
+npm install
+```
+
+### Development
+
+```bash
+npm run dev
+```
+
+### Build
+
+```bash
+npm run build
+```
+
+### Preview
+
+```bash
+npm run preview
+```
+
+## Project Structure
+
+```
+src/
+├── components/     # Reusable UI components
+├── App.tsx         # Main application component
+├── main.tsx        # Application entry point
+└── index.css       # Global styles with Tailwind imports
+```
+
+## Styling with Tailwind CSS
+
+This project uses Tailwind CSS v4 with the Vite plugin for optimal performance. You can use Tailwind utility classes directly in your components:
+
+```tsx
+<div className="bg-blue-500 text-white p-4 rounded-lg">
+  Hello Tailwind!
+</div>
+```
 
 ## Expanding the ESLint configuration
 
