@@ -74,6 +74,8 @@ const METAMASK_PROVIDER: WalletProvider = {
 const Header: React.FC = () => {
   const [wallet, setWallet] = useState<WalletInfo | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isLoadingENS, setIsLoadingENS] = useState(false);
+  const [isSwitchingNetwork, setIsSwitchingNetwork] = useState(false);
   const [selectedNetwork, setSelectedNetwork] = useState<Network>(NETWORKS[0]);
   const [showNetworkDropdown, setShowNetworkDropdown] = useState(false);
   const [showAddressDropdown, setShowAddressDropdown] = useState(false);
@@ -116,6 +118,7 @@ const Header: React.FC = () => {
       const accounts = await provider.send("eth_requestAccounts", []);
       const currentAddress = accounts[0];
 
+      setIsLoadingENS(true);
       const addresses: WalletAddress[] = await Promise.all(
         accounts.map(async (addr: string) => {
           const addressInfo: WalletAddress = {
@@ -128,6 +131,7 @@ const Header: React.FC = () => {
           return addressInfo;
         })
       );
+      setIsLoadingENS(false);
 
       const walletInfo: WalletInfo = {
         currentAddress,
@@ -146,26 +150,31 @@ const Header: React.FC = () => {
   };
 
   const updateWalletWithNewNetwork = async (wallet: WalletInfo, network: Network) => {
-    const provider = new ethers.BrowserProvider(window.ethereum!);
-    const updatedAddresses = await Promise.all(
-      wallet.addresses.map(async (addr) => {
-        const addressInfo = { ...addr };
-        // 重置 ENS 信息
-        addressInfo.ensName = undefined;
-        addressInfo.avatar = `https://api.dicebear.com/7.x/identicon/svg?seed=${addr.address}`;
+    setIsLoadingENS(true);
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum!);
+      const updatedAddresses = await Promise.all(
+        wallet.addresses.map(async (addr) => {
+          const addressInfo = { ...addr };
+          // 重置 ENS 信息
+          addressInfo.ensName = undefined;
+          addressInfo.avatar = `https://api.dicebear.com/7.x/identicon/svg?seed=${addr.address}`;
 
-        // 重新获取 ENS 信息
-        await fetchENSForAddress(addr.address, addressInfo, provider);
-        return addressInfo;
-      })
-    );
+          // 重新获取 ENS 信息
+          await fetchENSForAddress(addr.address, addressInfo, provider);
+          return addressInfo;
+        })
+      );
 
-    const updatedWallet = {
-      ...wallet,
-      network,
-      addresses: updatedAddresses
-    };
-    setWallet(updatedWallet);
+      const updatedWallet = {
+        ...wallet,
+        network,
+        addresses: updatedAddresses
+      };
+      setWallet(updatedWallet);
+    } finally {
+      setIsLoadingENS(false);
+    }
   };
 
   const fetchENSForAddress = async (address: string, addressInfo: WalletAddress, provider: ethers.BrowserProvider) => {
@@ -189,6 +198,7 @@ const Header: React.FC = () => {
     setShowNetworkDropdown(false);
 
     if (wallet && window.ethereum) {
+      setIsSwitchingNetwork(true);
       try {
         await window.ethereum.request({
           method: 'wallet_switchEthereumChain',
@@ -225,6 +235,8 @@ const Header: React.FC = () => {
           console.error('切换网络失败:', error);
           alert(`切换到 ${network.name} 失败`);
         }
+      } finally {
+        setIsSwitchingNetwork(false);
       }
     }
   };
@@ -262,6 +274,7 @@ const Header: React.FC = () => {
             const currentNetwork = NETWORKS.find(n => n.chainId === currentChainId) || NETWORKS[0];
             setSelectedNetwork(currentNetwork);
 
+            setIsLoadingENS(true);
             const addresses: WalletAddress[] = await Promise.all(
               accounts.map(async (addr: string) => {
                 const addressInfo: WalletAddress = {
@@ -274,6 +287,7 @@ const Header: React.FC = () => {
                 return addressInfo;
               })
             );
+            setIsLoadingENS(false);
 
             const walletInfo: WalletInfo = {
               currentAddress,
@@ -311,8 +325,11 @@ const Header: React.FC = () => {
                   selectedNetwork.id === 'sepolia' ? 'bg-purple-500' :
                   'bg-gray-500'
                 }`}></div>
-                <span className="text-sm font-medium text-gray-700">
-                  {selectedNetwork.name}
+                <span className="text-sm font-medium text-gray-700 flex items-center space-x-2">
+                  <span>{selectedNetwork.name}</span>
+                  {(isLoadingENS || isSwitchingNetwork) && (
+                    <div className="animate-spin w-3 h-3 border border-blue-500 border-t-transparent rounded-full"></div>
+                  )}
                 </span>
                 <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -325,7 +342,8 @@ const Header: React.FC = () => {
                     <button
                       key={network.id}
                       onClick={() => handleNetworkChange(network)}
-                      className={`w-full flex items-center space-x-3 px-4 py-3 hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg transition-colors ${
+                      disabled={isSwitchingNetwork}
+                      className={`w-full flex items-center space-x-3 px-4 py-3 hover:bg-gray-50 first:rounded-t-lg last:rounded-b-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                         selectedNetwork.id === network.id ? 'bg-blue-50 text-blue-700' : 'text-gray-700'
                       }`}
                     >
@@ -334,7 +352,12 @@ const Header: React.FC = () => {
                         network.id === 'sepolia' ? 'bg-purple-500' :
                         'bg-gray-500'
                       }`}></div>
-                      <span className="text-sm font-medium">{network.name}</span>
+                      <span className="text-sm font-medium flex items-center space-x-2">
+                        <span>{network.name}</span>
+                        {isSwitchingNetwork && selectedNetwork.id === network.id && (
+                          <div className="animate-spin w-3 h-3 border border-blue-500 border-t-transparent rounded-full"></div>
+                        )}
+                      </span>
                       {selectedNetwork.id === network.id && (
                         <svg className="w-4 h-4 ml-auto" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -365,8 +388,13 @@ const Header: React.FC = () => {
                     </div>
                     <div className="flex flex-col">
                       <div className="flex items-center space-x-1">
-                        <span className="text-sm font-medium text-gray-700">
-                          {wallet.addresses.find(addr => addr.address === wallet.currentAddress)?.ensName || formatAddress(wallet.currentAddress)}
+                        <span className="text-sm font-medium text-gray-700 flex items-center space-x-2">
+                          <span>
+                            {wallet.addresses.find(addr => addr.address === wallet.currentAddress)?.ensName || formatAddress(wallet.currentAddress)}
+                          </span>
+                          {isLoadingENS && (
+                            <div className="animate-spin w-3 h-3 border border-blue-500 border-t-transparent rounded-full"></div>
+                          )}
                         </span>
                         <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -409,8 +437,11 @@ const Header: React.FC = () => {
                                 className="w-6 h-6 rounded-full"
                               />
                               <div className="flex-1 text-left">
-                                <div className="text-sm font-medium text-gray-700">
-                                  {addr.ensName || formatAddress(addr.address)}
+                                <div className="text-sm font-medium text-gray-700 flex items-center space-x-2">
+                                  <span>{addr.ensName || formatAddress(addr.address)}</span>
+                                  {isLoadingENS && (
+                                    <div className="animate-spin w-3 h-3 border border-blue-500 border-t-transparent rounded-full"></div>
+                                  )}
                                 </div>
                                 <div className="text-xs text-gray-500">
                                   <span>账户 {index + 1}</span>
