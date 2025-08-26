@@ -1,12 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 
-interface NFT {
-  tokenId: string;
-  image?: string;
-  name?: string;
-}
-
 interface Network {
   id: string;
   name: string;
@@ -28,7 +22,6 @@ interface WalletAddress {
   address: string;
   ensName?: string;
   avatar?: string;
-  nfts: NFT[];
 }
 
 interface WalletInfo {
@@ -81,7 +74,6 @@ const METAMASK_PROVIDER: WalletProvider = {
 const Header: React.FC = () => {
   const [wallet, setWallet] = useState<WalletInfo | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [showNFTs, setShowNFTs] = useState(false);
   const [selectedNetwork, setSelectedNetwork] = useState<Network>(NETWORKS[0]);
   const [showNetworkDropdown, setShowNetworkDropdown] = useState(false);
   const [showAddressDropdown, setShowAddressDropdown] = useState(false);
@@ -102,7 +94,6 @@ const Header: React.FC = () => {
           method: 'wallet_switchEthereumChain',
           params: [{ chainId: `0x${selectedNetwork.chainId.toString(16)}` }],
         });
-        debugger
       } catch (switchError: any) {
         if (switchError.code === 4902) {
           await window.ethereum.request({
@@ -129,14 +120,10 @@ const Header: React.FC = () => {
         accounts.map(async (addr: string) => {
           const addressInfo: WalletAddress = {
             address: addr,
-            avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${addr}`,
-            nfts: []
+            avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${addr}`
           };
 
-          await Promise.all([
-            fetchENSForAddress(addr, addressInfo, provider),
-            fetchNFTsForAddress(addr, addressInfo)
-          ]);
+          await fetchENSForAddress(addr, addressInfo, provider);
 
           return addressInfo;
         })
@@ -158,6 +145,29 @@ const Header: React.FC = () => {
     }
   };
 
+  const updateWalletWithNewNetwork = async (wallet: WalletInfo, network: Network) => {
+    const provider = new ethers.BrowserProvider(window.ethereum!);
+    const updatedAddresses = await Promise.all(
+      wallet.addresses.map(async (addr) => {
+        const addressInfo = { ...addr };
+        // 重置 ENS 信息
+        addressInfo.ensName = undefined;
+        addressInfo.avatar = `https://api.dicebear.com/7.x/identicon/svg?seed=${addr.address}`;
+
+        // 重新获取 ENS 信息
+        await fetchENSForAddress(addr.address, addressInfo, provider);
+        return addressInfo;
+      })
+    );
+
+    const updatedWallet = {
+      ...wallet,
+      network,
+      addresses: updatedAddresses
+    };
+    setWallet(updatedWallet);
+  };
+
   const fetchENSForAddress = async (address: string, addressInfo: WalletAddress, provider: ethers.BrowserProvider) => {
     try {
       const ensName = await provider.lookupAddress(address);
@@ -173,29 +183,6 @@ const Header: React.FC = () => {
     }
   };
 
-  const fetchNFTsForAddress = async (address: string, addressInfo: WalletAddress) => {
-    try {
-      const response = await fetch(
-        `https://api.opensea.io/api/v1/assets?owner=${address}&limit=10`,
-        {
-          headers: {
-            'X-API-KEY': process.env.OPENSEA_API_KEY || ''
-          }
-        }
-      );
-
-      if (response.ok) {
-        const data = await response.json();
-        addressInfo.nfts = data.assets?.map((asset: any) => ({
-          tokenId: asset.token_id,
-          image: asset.image_url,
-          name: asset.name || `#${asset.token_id}`
-        })) || [];
-      }
-    } catch (error) {
-      console.log('获取 NFT 失败:', error);
-    }
-  };
 
   const handleNetworkChange = async (network: Network) => {
     setSelectedNetwork(network);
@@ -208,8 +195,8 @@ const Header: React.FC = () => {
           params: [{ chainId: `0x${network.chainId.toString(16)}` }],
         });
 
-        const updatedWallet = { ...wallet, network };
-        setWallet(updatedWallet);
+        // 网络切换成功后，重新获取所有地址的 ENS 信息
+        await updateWalletWithNewNetwork(wallet, network);
       } catch (error: any) {
         if (error.code === 4902) {
           try {
@@ -228,8 +215,8 @@ const Header: React.FC = () => {
               }],
             });
 
-            const updatedWallet = { ...wallet, network };
-            setWallet(updatedWallet);
+            // 网络添加成功后，重新获取所有地址的 ENS 信息
+            await updateWalletWithNewNetwork(wallet, network);
           } catch (addError) {
             console.error('添加网络失败:', addError);
             alert(`添加 ${network.name} 失败`);
@@ -254,7 +241,6 @@ const Header: React.FC = () => {
 
   const disconnectWallet = () => {
     setWallet(null);
-    setShowNFTs(false);
     setShowAddressDropdown(false);
   };
 
@@ -268,7 +254,7 @@ const Header: React.FC = () => {
         const provider = new ethers.BrowserProvider(window.ethereum);
         const accounts = await provider.send("eth_accounts", []);
         if (accounts.length > 0) {
-          const address = accounts[0];
+          const currentAddress = accounts[0];
 
           try {
             const chainId = await window.ethereum.request({ method: 'eth_chainId' });
@@ -276,20 +262,22 @@ const Header: React.FC = () => {
             const currentNetwork = NETWORKS.find(n => n.chainId === currentChainId) || NETWORKS[0];
             setSelectedNetwork(currentNetwork);
 
-            const addressInfo: WalletAddress = {
-              address,
-              avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${address}`,
-              nfts: []
-            };
+            const addresses: WalletAddress[] = await Promise.all(
+              accounts.map(async (addr: string) => {
+                const addressInfo: WalletAddress = {
+                  address: addr,
+                  avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${addr}`,
+                      };
 
-            await Promise.all([
-              fetchENSForAddress(address, addressInfo, provider),
-              fetchNFTsForAddress(address, addressInfo)
-            ]);
+                await fetchENSForAddress(addr, addressInfo, provider);
+
+                return addressInfo;
+              })
+            );
 
             const walletInfo: WalletInfo = {
-              currentAddress: address,
-              addresses: [addressInfo],
+              currentAddress,
+              addresses,
               network: currentNetwork,
               provider: METAMASK_PROVIDER
             };
@@ -380,11 +368,9 @@ const Header: React.FC = () => {
                         <span className="text-sm font-medium text-gray-700">
                           {wallet.addresses.find(addr => addr.address === wallet.currentAddress)?.ensName || formatAddress(wallet.currentAddress)}
                         </span>
-                        {wallet.addresses.length > 1 && (
-                          <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        )}
+                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
                       </div>
                       <span className="text-xs text-gray-500">
                         {wallet.provider.name}
@@ -392,17 +378,29 @@ const Header: React.FC = () => {
                     </div>
                   </div>
 
-                  {wallet.addresses.length > 1 && showAddressDropdown && (
+                  {showAddressDropdown && (
                     <div className="absolute top-full left-0 mt-2 w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-15">
                       <div className="p-3">
-                        <h3 className="text-sm font-medium text-gray-900 mb-2">切换账户</h3>
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-sm font-medium text-gray-900">
+                            {wallet.addresses.length > 1 ? '切换账户' : '账户信息'}
+                          </h3>
+                          <span className="text-xs text-gray-500">
+                            {wallet.addresses.length} 个地址
+                          </span>
+                        </div>
                         <div className="space-y-1 max-h-48 overflow-y-auto">
                           {wallet.addresses.map((addr, index) => (
                             <button
                               key={addr.address}
                               onClick={() => handleAddressChange(addr.address)}
-                              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors ${
-                                wallet.currentAddress === addr.address ? 'bg-blue-50 border border-blue-200' : 'border border-transparent'
+                              disabled={wallet.addresses.length === 1}
+                              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors ${
+                                wallet.currentAddress === addr.address
+                                  ? 'bg-blue-50 border border-blue-200'
+                                  : wallet.addresses.length > 1
+                                    ? 'hover:bg-gray-50 border border-transparent'
+                                    : 'border border-transparent cursor-default'
                               }`}
                             >
                               <img
@@ -415,7 +413,7 @@ const Header: React.FC = () => {
                                   {addr.ensName || formatAddress(addr.address)}
                                 </div>
                                 <div className="text-xs text-gray-500">
-                                  账户 {index + 1}
+                                  <span>账户 {index + 1}</span>
                                 </div>
                               </div>
                               {wallet.currentAddress === addr.address && (
@@ -426,55 +424,31 @@ const Header: React.FC = () => {
                             </button>
                           ))}
                         </div>
+                        {wallet.addresses.length === 1 && (
+                          <div className="mt-3 pt-3 border-t border-gray-100">
+                            <p className="text-xs text-gray-500 text-center">
+                              只有一个地址，无需切换
+                            </p>
+                          </div>
+                        )}
+                        {wallet.addresses.length > 1 && (
+                          <div className="mt-3 pt-3 border-t border-gray-100">
+                            <p className="text-xs text-gray-500 text-center">
+                              点击选择不同的钱包地址
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
 
-                  <div
-                    className="cursor-pointer hover:bg-gray-50 rounded-lg p-1 transition-colors"
-                    onClick={() => setShowNFTs(!showNFTs)}
+                  <button
+                    onClick={disconnectWallet}
+                    className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
                   >
-                    {(() => {
-                      const currentAddressInfo = wallet.addresses.find(addr => addr.address === wallet.currentAddress);
-                      const nftCount = currentAddressInfo?.nfts.length || 0;
-                      return nftCount > 0 && (
-                        <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
-                          {nftCount} NFT{nftCount > 1 ? 's' : ''}
-                        </span>
-                      );
-                    })()}
-                  </div>
+                    断开
+                  </button>
                 </div>
-
-                {showNFTs && wallet.addresses.find(addr => addr.address === wallet.currentAddress)?.nfts.length && (
-                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-10">
-                    <div className="p-4">
-                      <h3 className="text-sm font-medium text-gray-900 mb-3">我的 NFTs</h3>
-                      <div className="grid grid-cols-3 gap-3 max-h-60 overflow-y-auto">
-                        {wallet.addresses.find(addr => addr.address === wallet.currentAddress)?.nfts.map((nft: NFT, index: number) => (
-                          <div key={index} className="flex flex-col items-center">
-                            <div className="w-16 h-16 rounded-lg overflow-hidden border border-gray-200 bg-gray-100">
-                              {nft.image ? (
-                                <img
-                                  src={nft.image}
-                                  alt={nft.name}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">
-                                  NFT
-                                </div>
-                              )}
-                            </div>
-                            <span className="text-xs text-gray-600 mt-1 truncate w-full text-center">
-                              {nft.name}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             ) : (
               <button
