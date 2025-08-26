@@ -1,6 +1,6 @@
-import { useState } from 'react'
 import Header from './components/Header'
 import TransferModule from './components/TransferModule'
+import ChainDataModule from './components/ChainDataModule'
 
 function App() {
   return (
@@ -8,6 +8,8 @@ function App() {
       <Header />
 
       <TransferModule />
+      
+      <ChainDataModule />
     </div>
   )
 }
