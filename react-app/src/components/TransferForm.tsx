@@ -22,6 +22,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
+import { Progress } from "@/components/ui/progress";
 
 interface TransferFormData {
   recipientAddress: string;
@@ -63,6 +64,8 @@ const TransferForm: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [scanProgress, setScanProgress] = useState({ current: 0, total: 0 });
+  const [txProgress, setTxProgress] = useState(0);
+  const [txStep, setTxStep] = useState("");
   const transactionsPerPage = 10;
 
   const handleInputChange = (field: keyof TransferFormData, value: string) => {
@@ -199,24 +202,34 @@ const TransferForm: React.FC = () => {
     setError("");
     setTxHash("");
     setTxStatus("preparing");
+    setTxProgress(0);
+    setTxStep("");
 
     try {
-      // 检查钱包连接
+      // 步骤1: 检查钱包连接
+      setTxStep("检查钱包连接...");
+      setTxProgress(10);
       const provider = new ethers.BrowserProvider(window.ethereum);
       const accounts = await provider.send("eth_accounts", []);
 
       if (accounts.length === 0) {
         alert("请先连接钱包");
         setTxStatus("idle");
+        setTxProgress(0);
+        setTxStep("");
         return;
       }
 
-      // 验证地址格式
+      // 步骤2: 验证地址格式
+      setTxStep("验证地址格式...");
+      setTxProgress(20);
       if (!ethers.isAddress(formData.recipientAddress)) {
         throw new Error("接收方地址格式无效");
       }
 
-      // 获取 signer
+      // 步骤3: 获取signer和准备交易
+      setTxStep("准备交易参数...");
+      setTxProgress(30);
       const signer = await provider.getSigner();
 
       // 构建交易参数
@@ -233,16 +246,47 @@ const TransferForm: React.FC = () => {
         txParams.data = formData.inputData;
       }
 
-      // 发送交易
+      // 步骤4: 发送交易到区块链
+      setTxStep("发送交易到区块链...");
+      setTxProgress(40);
       setTxStatus("pending");
       const tx = await signer.sendTransaction(txParams);
       setTxHash(tx.hash);
+      console.log("交易已发送:", tx.hash);
+
+      // 步骤5: 等待交易被矿工打包
+      setTxStep("等待交易被矿工打包...");
+      setTxProgress(60);
+      
+      // 模拟等待过程中的进度更新
+      const progressInterval = setInterval(() => {
+        setTxProgress(prev => {
+          if (prev < 80) {
+            return prev + 5;
+          }
+          return prev;
+        });
+      }, 1000);
 
       // 等待交易确认
       setTxStatus("confirmed");
-      await tx.wait();
+      const receipt = await tx.wait(1); // 等待1个确认
+      clearInterval(progressInterval);
+      
+      setTxStep("交易已被确认...");
+      setTxProgress(85);
+      console.log("交易已确认:", receipt);
 
-      alert(`转账成功！\n交易哈希: ${tx.hash}`);
+      // 步骤6: 更新交易历史
+      setTxStep("更新交易历史...");
+      setTxProgress(95);
+      
+      // 重新获取交易历史
+      await fetchTransactionHistory();
+
+      // 步骤7: 完成
+      setTxStep("转账完成!");
+      setTxProgress(100);
 
       // 重置表单
       setFormData({
@@ -251,8 +295,12 @@ const TransferForm: React.FC = () => {
         inputData: "",
       });
 
-      // 重新获取交易历史
-      fetchTransactionHistory();
+      // 3秒后重置进度
+      setTimeout(() => {
+        setTxProgress(0);
+        setTxStep("");
+      }, 3000);
+
     } catch (err: any) {
       console.error("转账失败:", err);
       setTxStatus("failed");
@@ -267,17 +315,22 @@ const TransferForm: React.FC = () => {
       }
 
       setError(errorMessage);
+      setTxProgress(0);
+      setTxStep("");
     } finally {
       if (txStatus !== "confirmed") {
-        setTimeout(() => setTxStatus("idle"), 3000);
+        setTimeout(() => {
+          setTxStatus("idle");
+          setTxProgress(0);
+          setTxStep("");
+        }, 3000);
       }
     }
   };
 
   const isFormValid =
     formData.recipientAddress.trim() !== "" &&
-    formData.amount.trim() !== "" &&
-    txStatus === "idle";
+    formData.amount.trim() !== "";
 
   const getStatusText = () => {
     switch (txStatus) {
@@ -386,13 +439,29 @@ const TransferForm: React.FC = () => {
             />
           </div>
 
+          {/* 进度条 */}
+          {(txStatus === "preparing" || txStatus === "pending") && (
+            <Card className="border-primary/20 bg-primary/5">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-primary">转账进度</span>
+                  <span className="text-sm font-mono text-primary">{txProgress}%</span>
+                </div>
+                <Progress value={txProgress} className="h-2" />
+                {txStep && (
+                  <div className="flex items-center space-x-2">
+                    <div className="animate-spin w-4 h-4 border-2 border-primary border-t-transparent rounded-full flex-shrink-0"></div>
+                    <span className="text-sm text-muted-foreground">{txStep}</span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* 交易状态 */}
-          {txStatus !== "idle" && (
+          {txStatus !== "idle" && txStatus !== "preparing" && txStatus !== "pending" && (
             <Alert variant={txStatus === "failed" ? "destructive" : "default"}>
               <div className="flex items-center space-x-2">
-                {(txStatus === "preparing" || txStatus === "pending") && (
-                  <div className="animate-spin w-4 h-4 border-2 border-primary border-t-transparent rounded-full"></div>
-                )}
                 {txStatus === "confirmed" && (
                   <svg
                     className="w-4 h-4 text-green-600"
@@ -438,7 +507,7 @@ const TransferForm: React.FC = () => {
           {/* 提交按钮 */}
           <Button
             type="submit"
-            disabled={!isFormValid}
+            disabled={!isFormValid || txStatus !== "idle"}
             variant={getButtonVariant()}
             className="w-full"
             size="lg"
@@ -446,7 +515,7 @@ const TransferForm: React.FC = () => {
             {(txStatus === "preparing" || txStatus === "pending") && (
               <div className="animate-spin w-4 h-4 border-2 border-current border-t-transparent rounded-full mr-2"></div>
             )}
-            {getStatusText()}
+            {(txStatus === "preparing" || txStatus === "pending") ? "交易进行中..." : getStatusText()}
           </Button>
         </form>
       </div>
