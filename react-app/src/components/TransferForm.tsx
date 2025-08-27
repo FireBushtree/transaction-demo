@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { ethers } from "ethers";
+import axios from "axios";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -63,7 +64,6 @@ const TransferForm: React.FC = () => {
   const [transactions, setTransactions] = useState<TransactionHistory[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [scanProgress, setScanProgress] = useState({ current: 0, total: 0 });
   const [txProgress, setTxProgress] = useState(0);
   const [txStep, setTxStep] = useState("");
   const transactionsPerPage = 10;
@@ -94,93 +94,68 @@ const TransferForm: React.FC = () => {
       }
 
       const currentAddress = accounts[0];
-      const currentBlock = await provider.getBlockNumber();
-      const fromBlock = Math.max(0, currentBlock - 500); // 减少到最近500个区块以提高性能
+      
+      // 使用Etherscan API获取交易历史
+      const apiKey = import.meta.env.VITE_ETHERSCAN_API_KEY;
+      const apiUrl = `https://api-sepolia.etherscan.io/api`;
+      
+      console.log(`正在从Etherscan API获取地址 ${currentAddress} 的交易历史...`);
 
-      console.log(`正在扫描从区块 ${fromBlock} 到 ${currentBlock} 的交易...`);
-
-      const realTransactions: TransactionHistory[] = [];
-      const totalBlocks = currentBlock - fromBlock + 1;
-
-      setScanProgress({ current: 0, total: totalBlocks });
-
-      // 批量处理区块以提高效率，减少批次大小以获得更好的进度反馈
-      const batchSize = 50;
-      let processedBlocks = 0;
-
-      for (let i = fromBlock; i <= currentBlock; i += batchSize) {
-        const endBlock = Math.min(i + batchSize - 1, currentBlock);
-
-        try {
-          // 获取这个范围内的区块
-          const blockPromises = [];
-          for (let blockNum = i; blockNum <= endBlock; blockNum++) {
-            blockPromises.push(provider.getBlock(blockNum, true)); // true 表示包含交易详情
-          }
-
-          const blocks = await Promise.all(blockPromises);
-          processedBlocks += blocks.length;
-          setScanProgress({ current: processedBlocks, total: totalBlocks });
-
-          for (const block of blocks) {
-            if (!block || !block.transactions) continue;
-
-            // 检查每个交易是否与当前地址相关
-            for (const tx of block.transactions) {
-              const txData = (await provider.getTransaction(tx))!;
-
-              // 检查是否是与当前地址相关的交易
-              if (
-                txData.from?.toLowerCase() === currentAddress.toLowerCase() ||
-                txData.to?.toLowerCase() === currentAddress.toLowerCase()
-              ) {
-                // 获取交易回执以确定状态
-                let status: "success" | "failed" | "pending" = "success";
-                try {
-                  const receipt = await provider.getTransactionReceipt(
-                    txData.hash
-                  );
-                  status =
-                    receipt && receipt.status === 1 ? "success" : "failed";
-                } catch (err) {
-                  status = "pending";
-                }
-
-                realTransactions.push({
-                  hash: txData.hash,
-                  from: txData.from || "",
-                  to: txData.to || "",
-                  value: ethers.formatEther(txData.value || "0"),
-                  gasUsed: txData.gasLimit ? txData.gasLimit.toString() : "0",
-                  gasPrice: txData.gasPrice
-                    ? ethers.formatUnits(txData.gasPrice, "gwei")
-                    : "0",
-                  timestamp: block.timestamp * 1000, // 转换为毫秒
-                  blockNumber: block.number || 0,
-                  status,
-                  data: formatInputData(txData.data),
-                });
-              }
-            }
-          }
-        } catch (blockErr) {
-          console.warn(`获取区块 ${i}-${endBlock} 失败:`, blockErr);
-          // 继续处理下一批区块，不中断整个流程
-          continue;
+      const response = await axios.get(apiUrl, {
+        params: {
+          module: 'account',
+          action: 'txlist',
+          address: currentAddress,
+          startblock: 0,
+          endblock: 99999999,
+          page: 1,
+          offset: 50, // 获取最近50条交易
+          sort: 'desc', // 降序排列，最新的在前
+          apikey: apiKey
         }
+      });
+
+      if (response.data.status !== '1') {
+        throw new Error(response.data.message || '获取交易数据失败');
       }
 
-      // 按时间戳排序（最新的在前）
-      realTransactions.sort((a, b) => b.timestamp - a.timestamp);
+      const etherscanTransactions = response.data.result;
+      const realTransactions: TransactionHistory[] = [];
 
-      console.log(realTransactions);
-      console.log(`找到 ${realTransactions.length} 条相关交易`);
+      // 转换Etherscan数据格式为我们的TransactionHistory格式
+      for (const tx of etherscanTransactions) {
+        const status: "success" | "failed" | "pending" = 
+          tx.txreceipt_status === '1' ? 'success' : 
+          tx.txreceipt_status === '0' ? 'failed' : 'pending';
+
+        realTransactions.push({
+          hash: tx.hash,
+          from: tx.from,
+          to: tx.to,
+          value: ethers.formatEther(tx.value), // 转换从wei到ether
+          gasUsed: tx.gasUsed,
+          gasPrice: ethers.formatUnits(tx.gasPrice, "gwei"), // 转换为gwei
+          timestamp: parseInt(tx.timeStamp) * 1000, // 转换为毫秒
+          blockNumber: parseInt(tx.blockNumber),
+          status,
+          data: formatInputData(tx.input),
+        });
+      }
+
+      console.log(`从Etherscan API获取到 ${realTransactions.length} 条交易记录`);
       setTransactions(realTransactions);
-    } catch (err) {
+      
+    } catch (err: any) {
       console.error("获取交易历史失败:", err);
-
-      // 如果获取真实数据失败，显示错误信息而不是模拟数据
-      setError("获取交易历史失败，请检查网络连接或稍后重试");
+      
+      let errorMessage = "获取交易历史失败";
+      if (err.response?.data?.message) {
+        errorMessage = `API错误: ${err.response.data.message}`;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -543,12 +518,7 @@ const TransferForm: React.FC = () => {
             <div className="flex flex-col items-center justify-center py-8 space-y-4">
               <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full"></div>
               <div className="text-center">
-                <p className="text-sm">正在扫描区块链交易...</p>
-                {scanProgress.total > 0 && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    进度: {scanProgress.current} / {scanProgress.total} 区块
-                  </p>
-                )}
+                <p className="text-sm">正在从Etherscan API获取交易历史...</p>
               </div>
             </div>
           ) : error ? (

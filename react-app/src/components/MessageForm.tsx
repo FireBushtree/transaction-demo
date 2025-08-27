@@ -47,7 +47,7 @@ export default function MessageForm() {
 
   async function getContract() {
     const contractAbi = contractConfig.abi;
-    const network = contractConfig.networks["5777"].address;
+    const network = contractConfig.networks["11155111"].address;
     const provider = new ethers.BrowserProvider(window.ethereum!);
     const signer = await provider.getSigner();
     const contract = new ethers.Contract(network, contractAbi, signer);
@@ -87,7 +87,7 @@ export default function MessageForm() {
       // 步骤3: 等待打包
       setTxStep("等待交易被矿工打包...");
       setTxProgress(50);
-      
+
       // 模拟等待过程中的进度更新
       const progressInterval = setInterval(() => {
         setTxProgress(prev => {
@@ -97,11 +97,11 @@ export default function MessageForm() {
           return prev;
         });
       }, 1000);
-      
+
       // 监听交易确认
       const receipt = await tx.wait(1); // 等待1个确认
       clearInterval(progressInterval);
-      
+
       setTxStep("交易已被确认...");
       setTxProgress(80);
 
@@ -188,7 +188,7 @@ export default function MessageForm() {
       for (const event of events) {
         const block = await provider.getBlock(event.blockNumber);
         console.log(event)
-        
+
         // 确保事件是 EventLog 类型，有 args 属性
         if ('args' in event && event.args) {
           messageHistory.push({
