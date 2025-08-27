@@ -1,16 +1,10 @@
-import React, { useState } from 'react';
+import React from 'react';
 import TransferForm from './TransferForm';
 import MessageForm from './MessageForm';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const TransferModule: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('transfer');
-
-  const tabs = [
-    { id: 'transfer', name: '转账方式' },
-    { id: 'logs', name: '日志方式' }
-  ];
 
   return (
     <div className="w-full p-6">

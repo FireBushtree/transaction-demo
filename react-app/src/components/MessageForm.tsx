@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
+import { Progress } from "@/components/ui/progress";
 
 interface MessageEvent {
   transactionHash: string;
@@ -34,6 +35,8 @@ export default function MessageForm() {
   const [currentPage, setCurrentPage] = useState(1);
   const [eventLoading, setEventLoading] = useState(false);
   const [senderFilter, setSenderFilter] = useState("");
+  const [txProgress, setTxProgress] = useState(0);
+  const [txStep, setTxStep] = useState("");
   const eventsPerPage = 10;
 
   function getContractConfig() {
@@ -66,21 +69,63 @@ export default function MessageForm() {
     setLoading(true);
     setError("");
     setSuccess(false);
+    setTxProgress(0);
+    setTxStep("");
 
     try {
+      // 步骤1: 准备合约
+      setTxStep("准备合约连接...");
+      setTxProgress(10);
       const contract = await getContract();
+
+      // 步骤2: 发送交易
+      setTxStep("发送交易到区块链...");
+      setTxProgress(25);
       const tx = await contract.setMessage(formData.message);
       console.log("交易已发送:", tx.hash);
 
-      const receipt = await tx.wait();
+      // 步骤3: 等待打包
+      setTxStep("等待交易被矿工打包...");
+      setTxProgress(50);
+      
+      // 模拟等待过程中的进度更新
+      const progressInterval = setInterval(() => {
+        setTxProgress(prev => {
+          if (prev < 75) {
+            return prev + 5;
+          }
+          return prev;
+        });
+      }, 1000);
+      
+      // 监听交易确认
+      const receipt = await tx.wait(1); // 等待1个确认
+      clearInterval(progressInterval);
+      
+      setTxStep("交易已被确认...");
+      setTxProgress(80);
+
       console.log("交易已确认:", receipt);
 
-      setSuccess(true);
-      setFormData({ message: "" });
+      // 步骤4: 更新数据
+      setTxStep("更新合约数据...");
+      setTxProgress(90);
 
       // 刷新当前消息和历史记录
       await fetchCurrentMessage();
       await fetchMessageHistory();
+
+      // 步骤5: 完成
+      setTxStep("交易完成!");
+      setTxProgress(100);
+      setSuccess(true);
+      setFormData({ message: "" });
+
+      // 3秒后重置进度
+      setTimeout(() => {
+        setTxProgress(0);
+        setTxStep("");
+      }, 3000);
 
     } catch (err: any) {
       console.error("设置消息失败:", err);
@@ -95,6 +140,8 @@ export default function MessageForm() {
       }
 
       setError(errorMessage);
+      setTxProgress(0);
+      setTxStep("");
     } finally {
       setLoading(false);
 
@@ -141,14 +188,18 @@ export default function MessageForm() {
       for (const event of events) {
         const block = await provider.getBlock(event.blockNumber);
         console.log(event)
-        messageHistory.push({
-          transactionHash: event.transactionHash,
-          blockNumber: event.blockNumber,
-          sender: event.args![0],
-          oldMessage: event.args![1],
-          newMessage: event.args![2],
-          timestamp: (block?.timestamp || 0) * 1000,
-        });
+        
+        // 确保事件是 EventLog 类型，有 args 属性
+        if ('args' in event && event.args) {
+          messageHistory.push({
+            transactionHash: event.transactionHash,
+            blockNumber: event.blockNumber,
+            sender: event.args[0],
+            oldMessage: event.args[1],
+            newMessage: event.args[2],
+            timestamp: (block?.timestamp || 0) * 1000,
+          });
+        }
       }
 
       // 按时间戳排序（最新的在前）
@@ -258,6 +309,25 @@ export default function MessageForm() {
               className="resize-none"
             />
           </div>
+
+          {/* 进度条 */}
+          {loading && (
+            <Card className="border-primary/20 bg-primary/5">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-primary">交易进度</span>
+                  <span className="text-sm font-mono text-primary">{txProgress}%</span>
+                </div>
+                <Progress value={txProgress} className="h-2" />
+                {txStep && (
+                  <div className="flex items-center space-x-2">
+                    <div className="animate-spin w-4 h-4 border-2 border-primary border-t-transparent rounded-full flex-shrink-0"></div>
+                    <span className="text-sm text-muted-foreground">{txStep}</span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* 状态提示 */}
           {error && (
