@@ -162,48 +162,59 @@ export default function MessageForm() {
   }
 
   async function fetchMessageHistory(filterSender?: string) {
-    if (!contractConfig) return;
-
     setEventLoading(true);
     setError("");
 
     try {
-      const contract = await getContract();
-      const provider = new ethers.BrowserProvider(window.ethereum!);
-
-      // 根据是否有发送者过滤条件创建不同的过滤器
-      let filter;
+      // 构建 GraphQL 查询
+      let query = `{
+        messageChangeds(first: 100, orderBy: blockTimestamp, orderDirection: desc`;
+      
+      // 如果有发送者过滤，添加 where 条件
       if (filterSender && ethers.isAddress(filterSender)) {
-        // 使用 indexed 参数过滤特定发送者的事件
-        filter = contract.filters.MessageChanged(filterSender);
-      } else {
-        // 获取所有 MessageChanged 事件
-        filter = contract.filters.MessageChanged();
+        query += `, where: { sender: "${filterSender.toLowerCase()}" }`;
       }
-
-      const events = await contract.queryFilter(filter, 0, "latest");
-
-      const messageHistory: MessageEvent[] = [];
-
-      for (const event of events) {
-        const block = await provider.getBlock(event.blockNumber);
-        console.log(event)
-
-        // 确保事件是 EventLog 类型，有 args 属性
-        if ('args' in event && event.args) {
-          messageHistory.push({
-            transactionHash: event.transactionHash,
-            blockNumber: event.blockNumber,
-            sender: event.args[0],
-            oldMessage: event.args[1],
-            newMessage: event.args[2],
-            timestamp: (block?.timestamp || 0) * 1000,
-          });
+      
+      query += `) {
+          id
+          sender
+          oldMessage
+          newMessage
+          blockNumber
+          blockTimestamp
+          transactionHash
         }
+      }`;
+
+      // 发送请求到 The Graph
+      const response = await axios.post(
+        'https://api.studio.thegraph.com/query/119305/infocontract/version/latest',
+        {
+          query,
+          operationName: "Subgraphs",
+          variables: {}
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (response.data.errors) {
+        throw new Error(`GraphQL Error: ${response.data.errors[0].message}`);
       }
 
-      // 按时间戳排序（最新的在前）
-      messageHistory.sort((a, b) => b.timestamp - a.timestamp);
+      const messageChangeds = response.data.data.messageChangeds;
+      
+      const messageHistory: MessageEvent[] = messageChangeds.map((event: any) => ({
+        transactionHash: event.transactionHash,
+        blockNumber: parseInt(event.blockNumber),
+        sender: event.sender,
+        oldMessage: event.oldMessage,
+        newMessage: event.newMessage,
+        timestamp: parseInt(event.blockTimestamp) * 1000, // 转换为毫秒
+      }));
 
       if (filterSender) {
         setMessageEvents(messageHistory);
